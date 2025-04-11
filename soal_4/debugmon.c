@@ -79,16 +79,12 @@ fail_processes() {
     log_activity "$command" "FAILED"
   done
   log_message "Semua proses untuk pengguna $username telah digagalkan. Mode gagal aktif."
-  # Di sini Anda bisa implementasikan mekanisme untuk mencegah user menjalankan proses baru
-  # (Ini bisa lebih kompleks dan di luar cakupan dasar script ini)
 }
 
 # Fungsi untuk mengizinkan user kembali menjalankan proses
 revert_processes() {
   local username="$1"
   log_message "Mengembalikan mode normal untuk pengguna: $username"
-  # Di sini Anda bisa implementasikan mekanisme untuk mengembalikan izin menjalankan proses
-  # (Ini juga bisa lebih kompleks dan di luar cakupan dasar script ini)
   log_activity "debugmon_revert" "RUNNING" # Catat revert sebagai aktivitas
   log_message "Mode normal dipulihkan untuk pengguna: $username."
 }
