@@ -42,7 +42,7 @@ void base64_decode(const char *input, unsigned char *output) {
     output[index] = '\0';
 }
 
-// Returns 1 if the string is likely Base64, 0 otherwise
+
 int is_base64(const char *str) {
     int len = strlen(str);
     if (len == 0) return 0;
@@ -145,9 +145,9 @@ void run_decryption_daemon() {
     const char *source_dir = "starter_kit";
     const char *quarantine_dir = "quarantine";
 
-    // Debug: Print current working directory
+    
     char cwd[1024];
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {  // Fixed this line
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {  
         printf("Daemon starting in: %s\n", cwd);
     }
 
@@ -344,7 +344,7 @@ int file_exists(const char *path) {
 }
 
 // Main
-// Main dengan error handling yang lebih baik
+
 int main(int argc, char *argv[]) {
     const char *quarantine_dir = "quarantine";
     const char *starter_kit_dir = "starter_kit";
@@ -356,7 +356,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Handle opsi command line
+   
     if (argc == 2) {
         if (strcmp(argv[1], "--decrypt") == 0) {
             // Validasi sebelum menjalankan daemon
@@ -425,12 +425,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Default operation: download and extract
+    // Default 
     const char *url = "https://docs.google.com/uc?export=download&id=1_5GxIGfQr3mNKuavJbte_AoRkEQLXSKS";
     const char *download_path = "starterkit.zip";
     const char *extract_path = "starter_kit";
 
-    // Periksa apakah file sudah ada
+ 
     if (file_exists(download_path)) {
         fprintf(stderr, "Error: File '%s' already exists. Please remove it before downloading again.\n", download_path);
         return EXIT_FAILURE;
