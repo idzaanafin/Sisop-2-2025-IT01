@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <signal.h>
 
 
 // Base64 decoder
@@ -323,52 +325,116 @@ void shutdown_daemon(const char *pid_file_path) {
     remove(pid_file_path);
 }
 
+// Fungsi untuk memeriksa apakah direktori ada dan bisa diakses
+int directory_exists(const char *path) {
+    struct stat st;
+    if (stat(path, &st) == -1) {
+        return 0;
+    }
+    return S_ISDIR(st.st_mode);
+}
+
+// Fungsi untuk memeriksa apakah file ada dan bisa diakses
+int file_exists(const char *path) {
+    struct stat st;
+    if (stat(path, &st) == -1) {
+        return 0;
+    }
+    return S_ISREG(st.st_mode);
+}
+
 // Main
+// Main dengan error handling yang lebih baik
 int main(int argc, char *argv[]) {
     const char *quarantine_dir = "quarantine";
     const char *starter_kit_dir = "starter_kit";
     const char *pid_file = "starterkit.pid";
 
-    if (argc == 2 && strcmp(argv[1], "--decrypt") == 0) {
-        pid_t pid = fork();
-        if (pid < 0) {
-            perror("fork failed");
-            exit(EXIT_FAILURE);
-        }
-        if (pid > 0) {
-            printf("Daemon PID: %d\n", pid);
-            write_pid(pid_file, pid); // Simpan PID ke file
-            exit(EXIT_SUCCESS);
-        }
-
-        // Daemonisasi proses
-        umask(0);
-        setsid();
-
-        run_decryption_daemon();
-        return 0;
-    } else if (argc == 2 && strcmp(argv[1], "--quarantine") == 0) {
-        create_directory(quarantine_dir);
-        move_files(starter_kit_dir, quarantine_dir);
-        return 0;
-    } else if (argc == 2 && strcmp(argv[1], "--return") == 0) {
-        create_directory(starter_kit_dir);
-        move_files(quarantine_dir, starter_kit_dir);
-        return 0;
-    } else if (argc == 2 && strcmp(argv[1], "--eradicate") == 0) {
-        printf("Deleting all files in quarantine directory...\n");
-        eradicate_files(quarantine_dir);
-        printf("Eradication complete!\n");
-        return 0;
-    } else if (argc == 2 && strcmp(argv[1], "--shutdown") == 0) {
-        printf("Shutting down daemon process...\n");
-        shutdown_daemon(pid_file);
-        return 0;
+    // Validasi argumen
+    if (argc > 2) {
+        fprintf(stderr, "Usage: %s [--decrypt|--quarantine|--return|--eradicate|--shutdown]\n", argv[0]);
+        return EXIT_FAILURE;
     }
 
+    // Handle opsi command line
+    if (argc == 2) {
+        if (strcmp(argv[1], "--decrypt") == 0) {
+            // Validasi sebelum menjalankan daemon
+            if (!directory_exists(starter_kit_dir)) {
+                fprintf(stderr, "Error: Directory '%s' does not exist or is not accessible\n", starter_kit_dir);
+                return EXIT_FAILURE;
+            }
+
+            pid_t pid = fork();
+            if (pid < 0) {
+                perror("fork failed");
+                return EXIT_FAILURE;
+            }
+            if (pid > 0) {
+                printf("Daemon PID: %d\n", pid);
+                write_pid(pid_file, pid);
+                return EXIT_SUCCESS;
+            }
+
+            umask(0);
+            setsid();
+            run_decryption_daemon();
+            return 0;
+        }
+        else if (strcmp(argv[1], "--quarantine") == 0) {
+            if (!directory_exists(starter_kit_dir)) {
+                fprintf(stderr, "Error: Source directory '%s' does not exist\n", starter_kit_dir);
+                return EXIT_FAILURE;
+            }
+            create_directory(quarantine_dir);
+            move_files(starter_kit_dir, quarantine_dir);
+            return 0;
+        }
+        else if (strcmp(argv[1], "--return") == 0) {
+            if (!directory_exists(quarantine_dir)) {
+                fprintf(stderr, "Error: Quarantine directory '%s' does not exist\n", quarantine_dir);
+                return EXIT_FAILURE;
+            }
+            create_directory(starter_kit_dir);
+            move_files(quarantine_dir, starter_kit_dir);
+            return 0;
+        }
+        else if (strcmp(argv[1], "--eradicate") == 0) {
+            if (!directory_exists(quarantine_dir)) {
+                fprintf(stderr, "Error: Quarantine directory '%s' does not exist\n", quarantine_dir);
+                return EXIT_FAILURE;
+            }
+            printf("Deleting all files in quarantine directory...\n");
+            eradicate_files(quarantine_dir);
+            printf("Eradication complete!\n");
+            return 0;
+        }
+        else if (strcmp(argv[1], "--shutdown") == 0) {
+            if (!file_exists(pid_file)) {
+                fprintf(stderr, "Error: PID file '%s' does not exist - daemon may not be running\n", pid_file);
+                return EXIT_FAILURE;
+            }
+            printf("Shutting down daemon process...\n");
+            shutdown_daemon(pid_file);
+            return 0;
+        }
+        else {
+            fprintf(stderr, "Error: Unknown option '%s'\n", argv[1]);
+            fprintf(stderr, "Valid options: --decrypt, --quarantine, --return, --eradicate, --shutdown\n");
+            return EXIT_FAILURE;
+        }
+    }
+
+    // Default operation: download and extract
     const char *url = "https://docs.google.com/uc?export=download&id=1_5GxIGfQr3mNKuavJbte_AoRkEQLXSKS";
     const char *download_path = "starterkit.zip";
     const char *extract_path = "starter_kit";
+
+    // Periksa apakah file sudah ada
+    if (file_exists(download_path)) {
+        fprintf(stderr, "Error: File '%s' already exists. Please remove it before downloading again.\n", download_path);
+        return EXIT_FAILURE;
+    }
 
     printf("Downloading file from Google Drive...\n");
 
@@ -397,11 +463,26 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    // Validasi file yang didownload
+    struct stat st;
+    if (stat(download_path, &st) == -1 || st.st_size == 0) {
+        fprintf(stderr, "Error: Downloaded file is empty or inaccessible\n");
+        return EXIT_FAILURE;
+    }
+
     printf("Creating extraction directory...\n");
     create_directory(extract_path);
 
     printf("Extracting ZIP file...\n");
     extract_zip(download_path, extract_path);
+
+    // Validasi hasil ekstraksi
+    DIR *dir = opendir(extract_path);
+    if (!dir) {
+        perror("Failed to open extraction directory");
+        return EXIT_FAILURE;
+    }
+    closedir(dir);
 
     printf("Deleting original ZIP file...\n");
     delete_file(download_path);
