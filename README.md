@@ -305,8 +305,12 @@
           }
           return 0;
       }
-      
+
+  ![image](https://github.com/user-attachments/assets/ea40dd4c-9c83-48dd-86f1-2c19f3f61093)
+
   #### Membuat daemon & rename process
+  Pertama membuat daemon dari fungsi daemonize kemudian "menyamarkan" dengan merename thread process menjadi /init menggunakan prctl dan mengubah argv yang dikemas pada fungsi menyamarkan_process()
+  
        void daemonize() {
         // https://stackoverflow.com/questions/17954432/creating-a-daemon-in-linux
         pid_t pid, sid;
@@ -338,6 +342,8 @@
         }
     }
   #### Children process wannacryptor
+  disini melakukan fork untuk children proses pertama bernama wannacryptor. Dimana berfungsi untuk mengenkripsi semua file dan folder yang ada di current directory menggunakan algoritma xor dengan key timestamp. Jadi membuat fungsi xorfile() untuk melakukan enkripsi xor dan fungsi encrypt() untuk melakukan enkripsi secara rekursif ke semua file dan folder di current directory. proses ini berjalan secara terus menerus dengan interval 30 detik. fungsi tadi dispawn dengan memanggil child_1()
+  
         void xorfile(const char *filename, unsigned int key) {
           char tmp_filename[512];
           snprintf(tmp_filename, sizeof(tmp_filename), "%s.tmp", filename);
@@ -409,6 +415,8 @@
         }
     }
   #### Children Process trojan.wrm
+  kemudian children kedua bernama trojan.wrm ini berfungsi sebagai malware propagation untuk menyalin dirinya sendiri ke semua home directory dari useer dengan fungsi copy_self_recursive(). Proses ini di spawn dengan memanggil child_2
+  
         void copy_self_recursive(const char *dirpath) {
           DIR *dir = opendir(dirpath);
           if (!dir) return;
@@ -485,7 +493,12 @@
             exit(EXIT_SUCCESS);
         }
     }
+  
+  ![image](https://github.com/user-attachments/assets/366958d7-cb54-44d8-b841-ef3e1cab7827)
+
   #### Children process rodok.exe
+  pada children ke3 ini spawning proses yang memiliki beberapa thread sebagai children procesnya. dimana setiap thread akan generate hash secara random dan disimpan di /tmp/.miner.log. hash akan digenerate dalam interval random antara 3-30 detik. fungsi tersebut dipanggil dengan child_3 dan loop banyak thread menyesuakian.
+  
         char *generate_hash() {
           static char charset[] = "0123456789abcdef";
           static char hash[65];
@@ -559,6 +572,8 @@
             exit(EXIT_SUCCESS);
         }
     }
+  ![image](https://github.com/user-attachments/assets/e47698f1-25d7-4c92-bab2-3d6f63c9e522)
+
 # Soal 4
 - deklarasi library
    ```
