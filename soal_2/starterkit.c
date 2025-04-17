@@ -11,6 +11,33 @@
 #include <fcntl.h>
 #include <ctype.h>
 #include <signal.h>
+#include <time.h>
+#include <stdarg.h>
+
+//activity logger
+void log_activity(const char *format, ...) {
+    FILE *log_file = fopen("activity.log", "a");
+    if (!log_file) return;
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (!t) {
+        fclose(log_file);
+        return;
+    }
+
+    char time_str[32];
+    strftime(time_str, sizeof(time_str), "[%d-%m-%Y][%H:%M:%S]", t);
+    fprintf(log_file, "%s - ", time_str);
+
+    va_list args;
+    va_start(args, format);
+    vfprintf(log_file, format, args);
+    va_end(args);
+
+    fprintf(log_file, "\n");
+    fclose(log_file);
+}
 
 
 // Base64 decoder
@@ -42,7 +69,7 @@ void base64_decode(const char *input, unsigned char *output) {
     output[index] = '\0';
 }
 
-
+// Returns 1 if the string is likely Base64, 0 otherwise
 int is_base64(const char *str) {
     int len = strlen(str);
     if (len == 0) return 0;
@@ -141,32 +168,29 @@ void delete_file(const char *file_path) {
 }
 
 // Daemon untuk decrypt nama file
+volatile sig_atomic_t keep_running = 1;
+
+void sigterm_handler(int signum) {
+    keep_running = 0;
+}
+
 void run_decryption_daemon() {
     const char *source_dir = "starter_kit";
     const char *quarantine_dir = "quarantine";
 
-    
+    // Setup signal handler
+    signal(SIGTERM, sigterm_handler);
+
+    // Daemon initialization
     char cwd[1024];
-    if (getcwd(cwd, sizeof(cwd)) != NULL) {  
-        printf("Daemon starting in: %s\n", cwd);
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        fprintf(stderr, "Daemon starting in: %s\n", cwd);
     }
 
-    // Fork into background
-    pid_t pid = fork();
-    if (pid < 0) {
-        perror("fork failed");
-        exit(EXIT_FAILURE);
-    }
-    if (pid > 0) {
-        printf("Daemon PID: %d\n", pid);
-        exit(EXIT_SUCCESS);
-    }
 
-    // Daemon continues here
     umask(0);
     setsid();
-    
-    // Keep STDERR open temporarily for debugging
+
     int dev_null = open("/dev/null", O_WRONLY);
     if (dev_null == -1) {
         perror("open /dev/null failed");
@@ -174,60 +198,49 @@ void run_decryption_daemon() {
     }
     dup2(dev_null, STDIN_FILENO);
     dup2(dev_null, STDOUT_FILENO);
-    // Leave STDERR open for now
 
-    // Create quarantine directory with verbose errors
-    if (mkdir(quarantine_dir, 0755) == -1) {
-        if (errno != EEXIST) {
-            perror("Failed to create quarantine directory");
-            exit(EXIT_FAILURE);
-        }
-        fprintf(stderr, "Quarantine directory already exists\n");
-    } else {
-        fprintf(stderr, "Created quarantine directory\n");
-    }
-
-    // Open source directory
-    DIR *dir = opendir(source_dir);
-    if (!dir) {
-        perror("Failed to open source directory");
+    // Create quarantine directory if needed
+    if (mkdir(quarantine_dir, 0755) == -1 && errno != EEXIST) {
+        perror("Failed to create quarantine directory");
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stderr, "Starting file processing...\n");
-    
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type != DT_REG) continue;
-
-        fprintf(stderr, "Processing: %s\n", entry->d_name);
-
-        if (!is_base64(entry->d_name)) {
-            fprintf(stderr, "Skipping non-Base64 file: %s\n", entry->d_name);
+    // Loop until SIGTERM
+    while (keep_running) {
+        DIR *dir = opendir(source_dir);
+        if (!dir) {
+            perror("Failed to open source directory");
+            sleep(5);
             continue;
         }
 
-        unsigned char decoded_name[256];
-        base64_decode(entry->d_name, decoded_name);
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type != DT_REG) continue;
 
-        char src_path[1024], dest_path[1024];
-        snprintf(src_path, sizeof(src_path), "%s/%s", source_dir, entry->d_name);
-        snprintf(dest_path, sizeof(dest_path), "%s/%s", quarantine_dir, decoded_name);
+            if (!is_base64(entry->d_name)) continue;
 
-        fprintf(stderr, "Renaming %s -> %s\n", src_path, dest_path);
-        
-        if (rename(src_path, dest_path) == -1) {
-            perror("rename failed");
+            unsigned char decoded_name[256];
+            base64_decode(entry->d_name, decoded_name);
+
+            char src_path[1024], dest_path[1024];
+            snprintf(src_path, sizeof(src_path), "%s/%s", source_dir, entry->d_name);
+            snprintf(dest_path, sizeof(dest_path), "%s/%s", quarantine_dir, decoded_name);
+
+            rename(src_path, dest_path); // Move file
         }
+
+        closedir(dir);
+        sleep(5); // Wait before next scan
     }
 
-    closedir(dir);
-    fprintf(stderr, "Daemon finished processing\n");
+    fprintf(stderr, "Daemon shutting down...\n");
     close(dev_null);
     exit(EXIT_SUCCESS);
 }
 
-void move_files(const char *source_dir, const char *dest_dir) {
+
+void move_files(const char *source_dir, const char *dest_dir, const char *mode) {
     DIR *dir = opendir(source_dir);
     if (!dir) {
         perror("Failed to open source directory");
@@ -246,6 +259,10 @@ void move_files(const char *source_dir, const char *dest_dir) {
             perror("Failed to move file");
         } else {
             printf("Moved: %s -> %s\n", src_path, dest_path);
+            if (strcmp(mode, "quarantine") == 0)
+                log_activity("%s - Successfully moved to quarantine directory.", entry->d_name);
+            else if (strcmp(mode, "return") == 0)
+                log_activity("%s - Successfully returned to starter kit directory.", entry->d_name);
         }
     }
 
@@ -270,6 +287,7 @@ void eradicate_files(const char *dir_path) {
             perror("Failed to delete file");
         } else {
             printf("Deleted: %s\n", file_path);
+            log_activity("%s - Successfully deleted.", entry->d_name);
         }
     }
 
@@ -319,6 +337,7 @@ void shutdown_daemon(const char *pid_file_path) {
         perror("Failed to terminate daemon process");
     } else {
         printf("Daemon process with PID %d terminated.\n", pid);
+        log_activity("Successfully shut off decryption process with PID %d.", pid);
     }
 
     // Hapus file PID
@@ -344,7 +363,7 @@ int file_exists(const char *path) {
 }
 
 // Main
-
+// Main dengan error handling yang lebih baik
 int main(int argc, char *argv[]) {
     const char *quarantine_dir = "quarantine";
     const char *starter_kit_dir = "starter_kit";
@@ -356,7 +375,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-   
+    // Handle opsi command line
     if (argc == 2) {
         if (strcmp(argv[1], "--decrypt") == 0) {
             // Validasi sebelum menjalankan daemon
@@ -371,8 +390,9 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
             }
             if (pid > 0) {
-                printf("Daemon PID: %d\n", pid);
                 write_pid(pid_file, pid);
+                printf("Daemon PID: %d\n", pid);
+                log_activity("Successfully started decryption process with PID %d.", pid);
                 return EXIT_SUCCESS;
             }
 
@@ -387,7 +407,7 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
             }
             create_directory(quarantine_dir);
-            move_files(starter_kit_dir, quarantine_dir);
+            move_files(starter_kit_dir, quarantine_dir, "quarantine");
             return 0;
         }
         else if (strcmp(argv[1], "--return") == 0) {
@@ -396,7 +416,7 @@ int main(int argc, char *argv[]) {
                 return EXIT_FAILURE;
             }
             create_directory(starter_kit_dir);
-            move_files(quarantine_dir, starter_kit_dir);
+            move_files(quarantine_dir, starter_kit_dir, "return");
             return 0;
         }
         else if (strcmp(argv[1], "--eradicate") == 0) {
@@ -425,12 +445,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Default 
+    // Download dan extract
     const char *url = "https://docs.google.com/uc?export=download&id=1_5GxIGfQr3mNKuavJbte_AoRkEQLXSKS";
     const char *download_path = "starterkit.zip";
     const char *extract_path = "starter_kit";
 
- 
+    // Periksa apakah file sudah ada
     if (file_exists(download_path)) {
         fprintf(stderr, "Error: File '%s' already exists. Please remove it before downloading again.\n", download_path);
         return EXIT_FAILURE;
@@ -490,3 +510,4 @@ int main(int argc, char *argv[]) {
     printf("All tasks completed successfully!\n");
     return 0;
 }
+
