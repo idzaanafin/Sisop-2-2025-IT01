@@ -1,4 +1,4 @@
-# LAPORAN PRAKTIKUM SISTEM OPERASI MODUL 2 KELOMPOK IT01
+f# LAPORAN PRAKTIKUM SISTEM OPERASI MODUL 2 KELOMPOK IT01
 
   |       Nama        |     NRP    |
   |-------------------|------------|
@@ -656,6 +656,155 @@ int file_exists(const char *path) {
 }
 ```
 
+- kode int main
+```
+int main(int argc, char *argv[]) {
+    const char *quarantine_dir = "quarantine";
+    const char *starter_kit_dir = "starter_kit";
+    const char *pid_file = "starterkit.pid";
+
+    // Validasi argumen
+    if (argc > 2) {
+        fprintf(stderr, "Usage: %s [--decrypt|--quarantine|--return|--eradicate|--shutdown]\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    // Handle opsi command line
+    if (argc == 2) {
+        if (strcmp(argv[1], "--decrypt") == 0) {
+            // Validasi sebelum menjalankan daemon
+            if (!directory_exists(starter_kit_dir)) {
+                fprintf(stderr, "Error: Directory '%s' does not exist or is not accessible\n", starter_kit_dir);
+                return EXIT_FAILURE;
+            }
+
+            pid_t pid = fork();
+            if (pid < 0) {
+                perror("fork failed");
+                return EXIT_FAILURE;
+            }
+            if (pid > 0) {
+                write_pid(pid_file, pid);
+                printf("Daemon PID: %d\n", pid);
+                log_activity("Successfully started decryption process with PID %d.", pid);
+                return EXIT_SUCCESS;
+            }
+
+            umask(0);
+            setsid();
+            run_decryption_daemon();
+            return 0;
+        }
+        else if (strcmp(argv[1], "--quarantine") == 0) {
+            if (!directory_exists(starter_kit_dir)) {
+                fprintf(stderr, "Error: Source directory '%s' does not exist\n", starter_kit_dir);
+                return EXIT_FAILURE;
+            }
+            create_directory(quarantine_dir);
+            move_files(starter_kit_dir, quarantine_dir, "quarantine");
+            return 0;
+        }
+        else if (strcmp(argv[1], "--return") == 0) {
+            if (!directory_exists(quarantine_dir)) {
+                fprintf(stderr, "Error: Quarantine directory '%s' does not exist\n", quarantine_dir);
+                return EXIT_FAILURE;
+            }
+            create_directory(starter_kit_dir);
+            move_files(quarantine_dir, starter_kit_dir, "return");
+            return 0;
+        }
+        else if (strcmp(argv[1], "--eradicate") == 0) {
+            if (!directory_exists(quarantine_dir)) {
+                fprintf(stderr, "Error: Quarantine directory '%s' does not exist\n", quarantine_dir);
+                return EXIT_FAILURE;
+            }
+            printf("Deleting all files in quarantine directory...\n");
+            eradicate_files(quarantine_dir);
+            printf("Eradication complete!\n");
+            return 0;
+        }
+        else if (strcmp(argv[1], "--shutdown") == 0) {
+            if (!file_exists(pid_file)) {
+                fprintf(stderr, "Error: PID file '%s' does not exist - daemon may not be running\n", pid_file);
+                return EXIT_FAILURE;
+            }
+            printf("Shutting down daemon process...\n");
+            shutdown_daemon(pid_file);
+            return 0;
+        }
+        else {
+            fprintf(stderr, "Error: Unknown option '%s'\n", argv[1]);
+            fprintf(stderr, "Valid options: --decrypt, --quarantine, --return, --eradicate, --shutdown\n");
+            return EXIT_FAILURE;
+        }
+    }
+
+    // Download dan extract
+    const char *url = "https://docs.google.com/uc?export=download&id=1_5GxIGfQr3mNKuavJbte_AoRkEQLXSKS";
+    const char *download_path = "starterkit.zip";
+    const char *extract_path = "starter_kit";
+
+    // Periksa apakah file sudah ada
+    if (file_exists(download_path)) {
+        fprintf(stderr, "Error: File '%s' already exists. Please remove it before downloading again.\n", download_path);
+        return EXIT_FAILURE;
+    }
+
+    printf("Downloading file from Google Drive...\n");
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork failed");
+        return EXIT_FAILURE;
+    } else if (pid == 0) {
+        char *argv[] = {
+            "wget",
+            "--no-check-certificate",
+            (char *)url,
+            "-O",
+            (char *)download_path,
+            NULL
+        };
+        execvp("wget", argv);
+        perror("execvp failed");
+        exit(EXIT_FAILURE);
+    } else {
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+            fprintf(stderr, "Download failed with status: %d\n", WEXITSTATUS(status));
+            return EXIT_FAILURE;
+        }
+    }
+
+    // Validasi file yang didownload
+    struct stat st;
+    if (stat(download_path, &st) == -1 || st.st_size == 0) {
+        fprintf(stderr, "Error: Downloaded file is empty or inaccessible\n");
+        return EXIT_FAILURE;
+    }
+
+    printf("Creating extraction directory...\n");
+    create_directory(extract_path);
+
+    printf("Extracting ZIP file...\n");
+    extract_zip(download_path, extract_path);
+
+    // Validasi hasil ekstraksi
+    DIR *dir = opendir(extract_path);
+    if (!dir) {
+        perror("Failed to open extraction directory");
+        return EXIT_FAILURE;
+    }
+    closedir(dir);
+
+    printf("Deleting original ZIP file...\n");
+    delete_file(download_path);
+
+    printf("All tasks completed successfully!\n");
+    return 0;
+}
+```
 # Soal 3
   Pada soal ini terdapat 4 Objektif:
   - membuat daemon dan rename process menjadi /init
