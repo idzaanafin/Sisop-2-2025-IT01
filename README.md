@@ -320,7 +320,61 @@ void log_activity(const char *format, ...) {
     fclose(log_file);
 }
 ```
+- decode base64
+```
+// Base64 decoder
+int base64_char_value(char c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
 
+void base64_decode(const char *input, unsigned char *output) {
+    int len = strlen(input);
+    int val = 0, valb = -8;
+    int index = 0;
+
+    for (int i = 0; i < len; i++) {
+        if (input[i] == '=' || input[i] == '\n') break;
+        int c = base64_char_value(input[i]);
+        if (c == -1) continue;
+        val = (val << 6) + c;
+        valb += 6;
+        if (valb >= 0) {
+            output[index++] = (val >> valb) & 0xFF;
+            valb -= 8;
+        }
+    }
+    output[index] = '\0';
+}
+
+// Returns 1 if the string is likely Base64, 0 otherwise
+int is_base64(const char *str) {
+    int len = strlen(str);
+    if (len == 0) return 0;
+
+    // Check for padding at the end
+    if (str[len - 1] == '=') {
+        if (len >= 2 && str[len - 2] == '=') {
+            len -= 2;  // Handle double padding
+        } else {
+            len -= 1;  // Handle single padding
+        }
+    }
+
+    // untuk cek semua karakter
+    for (int i = 0; i < len; i++) {
+        char c = str[i];
+        if (!(isalnum(c) || c == '+' || c == '/')) {
+            return 0;
+        }
+    }
+    return 1;
+}
+```
 # Soal 3
   Pada soal ini terdapat 4 Objektif:
   - membuat daemon dan rename process menjadi /init
