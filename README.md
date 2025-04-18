@@ -8,7 +8,6 @@
 
 
 # Soal 1
-# Soal 1
  - Deklarasi library
     ```
     #include <stdio.h>
@@ -1079,3 +1078,18 @@
     return 0;
     }
     ```
+    ## DOKUMENTASI NOMER 4
+   - list user
+     
+     ![image](https://github.com/user-attachments/assets/ea429a22-4b08-4ea2-94d5-c348dd1ab43c)
+   - proses start daemon dan stop
+     
+     ![image](https://github.com/user-attachments/assets/92c980fb-f0da-4eca-a3c1-68de57d2a11b)
+   - proses revert dengan root
+     
+     ![image](https://github.com/user-attachments/assets/166eeabf-07a2-44a5-ae01-2ed973f3343e)
+   - Hasil file log
+     
+     ![image](https://github.com/user-attachments/assets/22f603de-2f16-4d11-aa31-237e25a40d1d)
+     ![image](https://github.com/user-attachments/assets/655b2b5d-107d-4774-92ac-7c994da843dd)
+
