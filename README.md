@@ -805,6 +805,37 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 ```
+###penggunaan dan output
+- ./starterkit
+default operation untuk download, extract, hapus file zip
+![image](https://github.com/user-attachments/assets/0ccd07d3-570a-4235-9070-af3fafc3bfa6)
+
+- ./starterki --decrypt
+menjalankan function decrypt daemon base 64
+![image](https://github.com/user-attachments/assets/23f99f6c-12e3-438a-97e8-6235adefc077)
+![image](https://github.com/user-attachments/assets/bb68160f-9708-4584-8132-116b7ad1bb9b)
+
+
+- ./starterkit --shutdown 
+mematikan proses daemon decrypt
+![image](https://github.com/user-attachments/assets/bd181e84-e713-425c-9823-96dcfb683b97)
+
+- ./starterkit --quarantine
+memindahkan file dari directory starter_kit ke directory quarantine
+![image](https://github.com/user-attachments/assets/8ad42717-aac0-45c1-80ae-70fdf33ba8d0)
+
+- ./starterkit --return 
+mengembalikan isi directory quarantine ke directory starter_kit
+![image](https://github.com/user-attachments/assets/cffaa016-fca4-4dd2-8193-86968ca03fcd)
+
+- ./starterkit --eradicate
+menghapus seluruh isi directory quarantine
+![image](https://github.com/user-attachments/assets/4102c8ff-40c3-4830-9479-d80c44acac8f)
+
+- jika argumen tidak sesuai 
+akan memberikan list perintah yang valid
+![image](https://github.com/user-attachments/assets/7c70f380-5fc9-4bab-bfe8-8faed22e0504)
+
 # Soal 3
   Pada soal ini terdapat 4 Objektif:
   - membuat daemon dan rename process menjadi /init
