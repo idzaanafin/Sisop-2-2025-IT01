@@ -272,8 +272,9 @@
 
 
 # Soal 2 
-## kode untuk soal nomor 2 
+Soal ini meminta untuk membuat sebuah file executable bernama starterkit yang bisa digunakan untuk mendownload file dari sebuah link, kemudian melakukan dekripsi nama dari base64, memindah file, menghapus isi file dalam sebuah direktori
 
+##penjelasan kode
 
 
 # Soal 3
