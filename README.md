@@ -351,7 +351,7 @@ void base64_decode(const char *input, unsigned char *output) {
     output[index] = '\0';
 }
 
-// Returns 1 if the string is likely Base64, 0 otherwise
+// Returns 1 jika nama file kemungkinan base64
 int is_base64(const char *str) {
     int len = strlen(str);
     if (len == 0) return 0;
@@ -375,6 +375,287 @@ int is_base64(const char *str) {
     return 1;
 }
 ```
+kode untuk dasar dekripsi dari base64 yang hanya merubah jika nama filenya dari base64
+
+- function extract, make directory, dan hapus file
+```
+// Mengekstrak ZIP
+void extract_zip(const char *zip_path, const char *extract_path) {
+    struct zip *z;
+    struct zip_file *zf;
+    struct zip_stat sb;
+    char buffer[8192];
+    int err;
+
+    z = zip_open(zip_path, 0, &err);
+    if (!z) {
+        fprintf(stderr, "Failed to open ZIP file: %s\n", zip_path);
+        return;
+    }
+
+    for (zip_uint64_t i = 0; i < zip_get_num_entries(z, 0); i++) {
+        if (zip_stat_index(z, i, 0, &sb) == 0) {
+            printf("Extracting: %s\n", sb.name);
+
+            zf = zip_fopen_index(z, i, 0);
+            if (!zf) {
+                fprintf(stderr, "Failed to open file in ZIP: %s\n", sb.name);
+                continue;
+            }
+
+            char out_path[1024];
+            snprintf(out_path, sizeof(out_path), "%s/%s", extract_path, sb.name);
+
+            // Buat direktori kalau perlu
+            char dir_path[1024];
+            strncpy(dir_path, out_path, sizeof(dir_path));
+            char *last_slash = strrchr(dir_path, '/');
+            if (last_slash) {
+                *last_slash = '\0';
+                mkdir(dir_path, 0755);
+            }
+
+            FILE *out = fopen(out_path, "wb");
+            if (!out) {
+                fprintf(stderr, "Failed to create output file: %s\n", out_path);
+                zip_fclose(zf);
+                continue;
+            }
+
+            zip_int64_t bytes_read;
+            while ((bytes_read = zip_fread(zf, buffer, sizeof(buffer))) > 0) {
+                fwrite(buffer, 1, bytes_read, out);
+            }
+
+            fclose(out);
+            zip_fclose(zf);
+        }
+    }
+
+    zip_close(z);
+    printf("Extraction complete!\n");
+}
+
+// Menghapus file
+void delete_file(const char *file_path) {
+    if (remove(file_path) != 0) {
+        perror("Failed to delete file");
+    } else {
+        printf("File deleted: %s\n", file_path);
+    }
+}
+
+```
+
+- daemon dekripsi dari base64
+```
+volatile sig_atomic_t keep_running = 1;
+
+void sigterm_handler(int signum) {
+    keep_running = 0;
+}
+
+void run_decryption_daemon() {
+    const char *source_dir = "starter_kit";
+    const char *quarantine_dir = "quarantine";
+
+    // Setup signal handler
+    signal(SIGTERM, sigterm_handler);
+
+    // Daemon initialization
+    char cwd[1024];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        fprintf(stderr, "Daemon starting in: %s\n", cwd);
+    }
+
+
+    umask(0);
+    setsid();
+
+    int dev_null = open("/dev/null", O_WRONLY);
+    if (dev_null == -1) {
+        perror("open /dev/null failed");
+        exit(EXIT_FAILURE);
+    }
+    dup2(dev_null, STDIN_FILENO);
+    dup2(dev_null, STDOUT_FILENO);
+
+    // Create quarantine directory if needed
+    if (mkdir(quarantine_dir, 0755) == -1 && errno != EEXIST) {
+        perror("Failed to create quarantine directory");
+        exit(EXIT_FAILURE);
+    }
+
+    // Loop until SIGTERM
+    while (keep_running) {
+        DIR *dir = opendir(source_dir);
+        if (!dir) {
+            perror("Failed to open source directory");
+            sleep(5);
+            continue;
+        }
+
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_type != DT_REG) continue;
+
+            if (!is_base64(entry->d_name)) continue;
+
+            unsigned char decoded_name[256];
+            base64_decode(entry->d_name, decoded_name);
+
+            char src_path[1024], dest_path[1024];
+            snprintf(src_path, sizeof(src_path), "%s/%s", source_dir, entry->d_name);
+            snprintf(dest_path, sizeof(dest_path), "%s/%s", quarantine_dir, decoded_name);
+
+            rename(src_path, dest_path); // Move file
+        }
+
+        closedir(dir);
+        sleep(5); // Wait before next scan
+    }
+
+    fprintf(stderr, "Daemon shutting down...\n");
+    close(dev_null);
+    exit(EXIT_SUCCESS);
+}
+
+```
+
+- function untuk memindahkan file menuju dari satu directory ke directory yang lain 
+```
+void move_files(const char *source_dir, const char *dest_dir, const char *mode) {
+    DIR *dir = opendir(source_dir);
+    if (!dir) {
+        perror("Failed to open source directory");
+        exit(EXIT_FAILURE);
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type != DT_REG) continue;
+
+        char src_path[1024], dest_path[1024];
+        snprintf(src_path, sizeof(src_path), "%s/%s", source_dir, entry->d_name);
+        snprintf(dest_path, sizeof(dest_path), "%s/%s", dest_dir, entry->d_name);
+
+        if (rename(src_path, dest_path) == -1) {
+            perror("Failed to move file");
+        } else {
+            printf("Moved: %s -> %s\n", src_path, dest_path);
+            if (strcmp(mode, "quarantine") == 0)
+                log_activity("%s - Successfully moved to quarantine directory.", entry->d_name);
+            else if (strcmp(mode, "return") == 0)
+                log_activity("%s - Successfully returned to starter kit directory.", entry->d_name);
+        }
+    }
+
+    closedir(dir);
+}
+```
+
+- fungsi eradicate untuk menghapus isi directory quarantine
+```
+void eradicate_files(const char *dir_path) {
+    DIR *dir = opendir(dir_path);
+    if (!dir) {
+        perror("Failed to open directory");
+        exit(EXIT_FAILURE);
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (entry->d_type != DT_REG) continue;
+
+        char file_path[1024];
+        snprintf(file_path, sizeof(file_path), "%s/%s", dir_path, entry->d_name);
+
+        if (remove(file_path) == -1) {
+            perror("Failed to delete file");
+        } else {
+            printf("Deleted: %s\n", file_path);
+            log_activity("%s - Successfully deleted.", entry->d_name);
+        }
+    }
+
+    closedir(dir);
+}
+```
+
+- fungsi untuk baca pid dan shutdown daemon decrypt base 64
+```
+// Fungsi untuk membaca PID dari file
+pid_t read_pid(const char *pid_file_path) {
+    FILE *pid_file = fopen(pid_file_path, "r");
+    if (!pid_file) {
+        perror("Failed to open PID file");
+        return -1;
+    }
+
+    pid_t pid;
+    if (fscanf(pid_file, "%d", &pid) != 1) {
+        perror("Failed to read PID from file");
+        fclose(pid_file);
+        return -1;
+    }
+
+    fclose(pid_file);
+    return pid;
+}
+
+// Fungsi untuk menulis PID ke file
+void write_pid(const char *pid_file_path, pid_t pid) {
+    FILE *pid_file = fopen(pid_file_path, "w");
+    if (!pid_file) {
+        perror("Failed to write PID file");
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(pid_file, "%d\n", pid);
+    fclose(pid_file);
+}
+
+// Fungsi untuk menghentikan proses berdasarkan PID
+void shutdown_daemon(const char *pid_file_path) {
+    pid_t pid = read_pid(pid_file_path);
+    if (pid == -1) {
+        fprintf(stderr, "Could not retrieve PID.\n");
+        return;
+    }
+
+    if (kill(pid, SIGTERM) == -1) {
+        perror("Failed to terminate daemon process");
+    } else {
+        printf("Daemon process with PID %d terminated.\n", pid);
+        log_activity("Successfully shut off decryption process with PID %d.", pid);
+    }
+
+    // Hapus file PID
+    remove(pid_file_path);
+}
+```
+
+- fungsi untuk cek apakah directory ada dan bisa diakses
+```
+int directory_exists(const char *path) {
+    struct stat st;
+    if (stat(path, &st) == -1) {
+        return 0;
+    }
+    return S_ISDIR(st.st_mode);
+}
+```
+- Fungsi untuk memeriksa apakah file ada dan bisa diakses
+```
+int file_exists(const char *path) {
+    struct stat st;
+    if (stat(path, &st) == -1) {
+        return 0;
+    }
+    return S_ISREG(st.st_mode);
+}
+```
+
 # Soal 3
   Pada soal ini terdapat 4 Objektif:
   - membuat daemon dan rename process menjadi /init
