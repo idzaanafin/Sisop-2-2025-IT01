@@ -10,7 +10,7 @@
 
 #define ZIP_FILE "Clues.zip"
 #define ZIP_URL "https://drive.google.com/uc?export=download&id=1xFn1OBJUuSdnApDseEczKhtNzyGekauK"
-#define ZIP_PASSWORD "password123" 
+#define ZIP_PASSWORD "password123"
 
 int is_valid_file(const char *filename) {
     return strlen(filename) == 5 && isalnum(filename[0]) && strcmp(filename + 1, ".txt") == 0;
@@ -46,7 +46,6 @@ void download_and_unzip() {
         return;
     }
 
-    // Cek Zip download
     if (stat(ZIP_FILE, &st) != 0) {
         fprintf(stderr, "File Clues.zip tidak ditemukan setelah download.\n");
         return;
@@ -59,7 +58,6 @@ void download_and_unzip() {
         return;
     }
 
-    // Cek apakah folder Clues
     if (stat("Clues", &st) != 0 || !S_ISDIR(st.st_mode)) {
         fprintf(stderr, "Folder Clues tidak ditemukan setelah ekstraksi.\n");
         return;
@@ -158,7 +156,7 @@ void combine_files() {
             if (f) {
                 int c; while ((c = fgetc(f)) != EOF) fputc(c, out);
                 fclose(f);
-                remove(path);
+                remove(path); 
             }
         }
         if (i < l) {
@@ -168,7 +166,7 @@ void combine_files() {
             if (f) {
                 int c; while ((c = fgetc(f)) != EOF) fputc(c, out);
                 fclose(f);
-                remove(path);
+                remove(path); 
             }
         }
     }
