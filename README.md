@@ -276,6 +276,50 @@ Soal ini meminta untuk membuat sebuah file executable bernama starterkit yang bi
 
 ##penjelasan kode
 
+- library yang digunakan
+```
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <zip.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <dirent.h>
+#include <fcntl.h>
+#include <ctype.h>
+#include <signal.h>
+#include <time.h>
+#include <stdarg.h>
+```
+
+- function yang digunakan untuk membuat dan merekap pengguanaan
+```
+void log_activity(const char *format, ...) {
+    FILE *log_file = fopen("activity.log", "a");
+    if (!log_file) return;
+
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+    if (!t) {
+        fclose(log_file);
+        return;
+    }
+
+    char time_str[32];
+    strftime(time_str, sizeof(time_str), "[%d-%m-%Y][%H:%M:%S]", t);
+    fprintf(log_file, "%s - ", time_str);
+
+    va_list args;
+    va_start(args, format);
+    vfprintf(log_file, format, args);
+    va_end(args);
+
+    fprintf(log_file, "\n");
+    fclose(log_file);
+}
+```
 
 # Soal 3
   Pada soal ini terdapat 4 Objektif:
